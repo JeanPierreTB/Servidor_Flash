@@ -11,8 +11,8 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 CORS(app)
 
-# Configurar la base de datos PostgreSQL
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://usuario:contraseña@hostname:puerto/db_name')
+# Configurar la base de datos PostgreSQL con la URL externa
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://dataset_estres_user:KIDw4oaKu2uWIbijxgOCfkCOwRWIsB5V@dpg-crmpfndumphs739ip24g-a.oregon-postgres.render.com/dataset_estres'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
