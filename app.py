@@ -77,6 +77,41 @@ def obtener_datos():
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/sensor-data/latest', methods=['GET'])
+def obtener_datos_ultima_persona():
+    try:
+        # Obtener la última entrada en la base de datos
+        last_entry = SensorData.query.order_by(SensorData.id.desc()).first()
+        
+        if last_entry:
+            # Obtener el nombre de la última persona registrada
+            nombre_ultima_persona = last_entry.persona
+            
+            # Obtener todos los datos de la última persona
+            datos_ultima_persona = SensorData.query.filter_by(persona=nombre_ultima_persona).all()
+            
+            # Formatear el resultado
+            result = []
+            for data in datos_ultima_persona:
+                result.append({
+                    'id': data.id,
+                    'acc_X': data.acc_X,
+                    'acc_Y': data.acc_Y,
+                    'acc_Z': data.acc_Z,
+                    'temperatura': data.temperatura,
+                    'frecuencia': data.frecuencia,
+                    'estresado': data.estresado,
+                    'persona': data.persona
+                })
+
+            return jsonify(result), 200
+        else:
+            return jsonify({"message": "No se encontraron datos"}), 404
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/reset-database', methods=['GET'])
 def reset_database():
     try:
@@ -86,6 +121,9 @@ def reset_database():
         return jsonify({"status": "base de datos restablecida"}), 200
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
+    
+
+
 
 @app.route('/status', methods=['GET'])
 def status():
