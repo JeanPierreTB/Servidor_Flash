@@ -28,9 +28,10 @@ class SensorData(db.Model):
     estresado = db.Column(db.Integer, nullable=True)  # Permitir nulos
     persona = db.Column(db.String(100), nullable=False)
 
-# Crear la tabla si no existe
+# Crear la tabla (eliminar primero si existe)
 with app.app_context():
-    db.create_all()
+    db.drop_all()  # Eliminar la tabla si existe
+    db.create_all()  # Crear la tabla de nuevo
 
 @app.route('/sensor-data', methods=['POST'])
 def recibir_datos():
