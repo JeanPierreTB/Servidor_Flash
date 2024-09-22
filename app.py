@@ -28,10 +28,9 @@ class SensorData(db.Model):
     estresado = db.Column(db.Integer, nullable=True)  # Permitir nulos
     persona = db.Column(db.String(100), nullable=False)
 
-# Crear la tabla (eliminar primero si existe)
+# Crear la tabla si no existe
 with app.app_context():
-    db.drop_all()  # Eliminar la tabla si existe
-    db.create_all()  # Crear la tabla de nuevo
+    db.create_all()
 
 @app.route('/sensor-data', methods=['POST'])
 def recibir_datos():
@@ -75,6 +74,16 @@ def obtener_datos():
             })
 
         return jsonify(result), 200
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/reset-database', methods=['GET'])
+def reset_database():
+    try:
+        with app.app_context():
+            db.drop_all()  # Eliminar la tabla
+            db.create_all()  # Crear la tabla de nuevo
+        return jsonify({"status": "base de datos restablecida"}), 200
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
 
