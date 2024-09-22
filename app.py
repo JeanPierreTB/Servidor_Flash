@@ -110,6 +110,28 @@ def obtener_datos_ultima_persona():
             return jsonify({"message": "No se encontraron datos"}), 404
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/sensor-data/update-predictions', methods=['POST'])
+def actualizar_predicciones():
+    try:
+        data = request.json
+        updates = data.get('updates', [])
+
+        for update in updates:
+            registro_id = update.get('id')
+            estresado = update.get('estresado')
+
+            registro = SensorData.query.get(registro_id)
+            if registro:
+                registro.estresado = estresado
+            else:
+                print(f"Registro no encontrado para ID: {registro_id}")
+
+        db.session.commit()
+        return jsonify({"status": "predicciones actualizadas"}), 200
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/reset-database', methods=['GET'])
