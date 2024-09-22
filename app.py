@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify 
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import SQLAlchemyError
@@ -25,6 +25,8 @@ class SensorData(db.Model):
     acc_Z = db.Column(db.Float, nullable=False)
     temperatura = db.Column(db.Float, nullable=False)
     frecuencia = db.Column(db.Float, nullable=False)
+    estresado = db.Column(db.Integer, nullable=True)  # Permitir nulos
+    persona = db.Column(db.String(100), nullable=False)
 
 # Crear la tabla si no existe
 with app.app_context():
@@ -41,7 +43,9 @@ def recibir_datos():
             acc_Y=data.get('acc_Y'),
             acc_Z=data.get('acc_Z'),
             temperatura=data.get('temperatura'),
-            frecuencia=data.get('frecuencia')
+            frecuencia=data.get('frecuencia'),
+            estresado=data.get('estresado', None),  # Asignar None si no se pasa
+            persona=data.get('persona')
         )
         db.session.add(new_data)
         db.session.commit()
@@ -64,7 +68,9 @@ def obtener_datos():
                 'acc_Y': data.acc_Y,
                 'acc_Z': data.acc_Z,
                 'temperatura': data.temperatura,
-                'frecuencia': data.frecuencia
+                'frecuencia': data.frecuencia,
+                'estresado': data.estresado,
+                'persona': data.persona
             })
 
         return jsonify(result), 200
