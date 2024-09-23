@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import SQLAlchemyError
-import os
 import logging
 import numpy as np
 from tensorflow.keras.models import load_model
@@ -19,9 +18,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://dataset_estres_user:KIDw4o
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Cargar el modelo y el scaler al iniciar la aplicación
+# Cargar el modelo al iniciar la aplicación
 modelo = load_model('best_lstm_model_f.h5')
-scaler = StandardScaler()
 
 # Definir el modelo de la tabla donde se almacenarán los datos
 class SensorData(db.Model):
@@ -38,10 +36,6 @@ class SensorData(db.Model):
 # Crear la tabla si no existe
 with app.app_context():
     db.create_all()
-
-# Ajustar el scaler con un conjunto de datos representativo si tienes uno
-# Esto es solo un ejemplo, deberías usar tus datos reales para ajustar el scaler
-# scaler.fit(...) 
 
 @app.route('/sensor-data', methods=['POST'])
 def recibir_datos():
@@ -62,12 +56,37 @@ def recibir_datos():
         db.session.add(new_data)
         db.session.commit()
 
-        # Normalización de los datos para la predicción
-        datos_normalizados = scaler.transform(np.array([[data.get('acc_X'), 
-                                                          data.get('acc_Y'),
-                                                          data.get('acc_Z'),
-                                                          data.get('frecuencia'),
-                                                          data.get('temperatura')]]))
+        # Consultar los últimos 5 datos de sensores de la base de datos
+        datos_anteriores = SensorData.query.with_entities(
+            SensorData.acc_X,
+            SensorData.acc_Y,
+            SensorData.acc_Z,
+            SensorData.frecuencia,
+            SensorData.temperatura
+        ).order_by(SensorData.id.desc()).limit(5).all()
+
+        # Convertir a array de numpy
+        datos_anteriores_array = np.array(datos_anteriores)
+
+        if len(datos_anteriores_array) == 0:
+            # No hay registros anteriores, no se normaliza
+            datos_normalizados = np.array([[data.get('acc_X'),
+                                            data.get('acc_Y'),
+                                            data.get('acc_Z'),
+                                            data.get('frecuencia'),
+                                            data.get('temperatura')]])
+        else:
+            # Ajustar el scaler con los datos anteriores
+            scaler = StandardScaler()
+            scaler.fit(datos_anteriores_array)
+
+            # Normalización de los nuevos datos para la predicción
+            nuevos_datos = np.array([[data.get('acc_X'), 
+                                       data.get('acc_Y'),
+                                       data.get('acc_Z'),
+                                       data.get('frecuencia'),
+                                       data.get('temperatura')]])
+            datos_normalizados = scaler.transform(nuevos_datos)
 
         # Preparar los datos en el formato adecuado para el modelo
         datos_normalizados_timestep = np.expand_dims(datos_normalizados, axis=1)
