@@ -77,6 +77,7 @@ def recibir_datos():
                                             data.get('temperatura')]])
         else:
             # Ajustar el scaler con los datos anteriores
+            logging.info("Entrando a normalizar...")
             scaler = StandardScaler()
             scaler.fit(datos_anteriores_array)
 
@@ -87,11 +88,13 @@ def recibir_datos():
                                        data.get('frecuencia'),
                                        data.get('temperatura')]])
             datos_normalizados = scaler.transform(nuevos_datos)
+            logging.info("Normalización terminada.")
 
         # Preparar los datos en el formato adecuado para el modelo
         datos_normalizados_timestep = np.expand_dims(datos_normalizados, axis=1)
 
         # Realizar la predicción
+        logging.info("Prediciendo modelo...")
         probabilidad = modelo.predict(datos_normalizados_timestep)
         umbral = 0.5
         estresado = int(probabilidad > umbral)
