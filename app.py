@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify 
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import SQLAlchemyError
@@ -19,7 +19,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://dataset_estres_user:KIDw4o
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Cargar el modelo al iniciar la aplicación
+# Cargar el modelo y el scaler al iniciar la aplicación
 modelo = load_model('best_lstm_model_f.h5')
 scaler = StandardScaler()
 
@@ -38,6 +38,10 @@ class SensorData(db.Model):
 # Crear la tabla si no existe
 with app.app_context():
     db.create_all()
+
+# Ajustar el scaler con un conjunto de datos representativo si tienes uno
+# Esto es solo un ejemplo, deberías usar tus datos reales para ajustar el scaler
+# scaler.fit(...) 
 
 @app.route('/sensor-data', methods=['POST'])
 def recibir_datos():
@@ -59,11 +63,11 @@ def recibir_datos():
         db.session.commit()
 
         # Normalización de los datos para la predicción
-        datos_normalizados = scaler.fit_transform(np.array([[data.get('acc_X'), 
-                                                             data.get('acc_Y'),
-                                                             data.get('acc_Z'),
-                                                             data.get('frecuencia'),
-                                                             data.get('temperatura')]]))
+        datos_normalizados = scaler.transform(np.array([[data.get('acc_X'), 
+                                                          data.get('acc_Y'),
+                                                          data.get('acc_Z'),
+                                                          data.get('frecuencia'),
+                                                          data.get('temperatura')]]))
 
         # Preparar los datos en el formato adecuado para el modelo
         datos_normalizados_timestep = np.expand_dims(datos_normalizados, axis=1)
@@ -81,7 +85,6 @@ def recibir_datos():
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-
 
 @app.route('/sensor-data', methods=['GET'])
 def obtener_datos():
@@ -104,7 +107,6 @@ def obtener_datos():
         return jsonify(result), 200
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route('/sensor-data/latest', methods=['GET'])
 def obtener_datos_ultima_persona():
@@ -139,7 +141,6 @@ def obtener_datos_ultima_persona():
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
 
-    
 @app.route('/reset-database', methods=['GET'])
 def reset_database():
     try:
@@ -149,7 +150,6 @@ def reset_database():
         return jsonify({"status": "base de datos restablecida"}), 200
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
-    
 
 @app.route('/status', methods=['GET'])
 def status():
