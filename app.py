@@ -1,13 +1,9 @@
-from flask import Flask, request, jsonify
+import Flask, request, jsonify 
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import SQLAlchemyError
-import threading
+import os
 import logging
-import numpy as np
-from tensorflow.keras.models import load_model
-from sklearn.preprocessing import StandardScaler
-import time
 
 # Configurar el logging
 logging.basicConfig(level=logging.INFO)
@@ -20,13 +16,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://dataset_estres_user:KIDw4o
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Cargar el modelo al iniciar la aplicación
-try:
-    modelo = load_model('best_lstm_model_f.h5')
-    logging.info("Modelo cargado exitosamente")
-except Exception as e:
-    logging.error(f"Error al cargar el modelo: {str(e)}")
-
 # Definir el modelo de la tabla donde se almacenarán los datos
 class SensorData(db.Model):
     __tablename__ = 'sensor_data'
@@ -36,39 +25,12 @@ class SensorData(db.Model):
     acc_Z = db.Column(db.Float, nullable=False)
     temperatura = db.Column(db.Float, nullable=False)
     frecuencia = db.Column(db.Float, nullable=False)
-    estresado = db.Column(db.Integer, nullable=True)  # Permitimos nulos
+    estresado = db.Column(db.Integer, nullable=True)  # Permitir nulos
     persona = db.Column(db.String(100), nullable=False)
 
 # Crear la tabla si no existe
 with app.app_context():
     db.create_all()
-
-def realizar_prediccion(datos_normalizados_timestep, new_data):
-    logging.info("Prediciendo modelo...")
-    try:
-        # Crear una nueva sesión de base de datos para el hilo
-        with app.app_context():
-            # Imprimir la forma de los datos antes de la predicción
-            logging.info(f"Forma de los datos para el modelo: {datos_normalizados_timestep.shape}")
-            
-            # Medir el tiempo de predicción
-            start_time = time.time()
-            probabilidad = modelo.predict(datos_normalizados_timestep)
-            logging.info(f"Predicción realizada en {time.time() - start_time} segundos")
-            
-            umbral = 0.5
-            estresado = int(probabilidad[0][0] > umbral)  # Extraer el valor como un escalar
-            logging.info(f"Probabilidad obtenida: {probabilidad}, estresado: {estresado}")
-            
-            # Actualizar el registro con la predicción
-            new_data.estresado = estresado
-            
-            # Actualizar el objeto en la sesión y hacer commit
-            db.session.add(new_data)
-            db.session.commit()
-            logging.info("Modelo terminó de predecir y la base de datos fue actualizada")
-    except Exception as e:
-        logging.error(f"Error en la predicción: {str(e)}")
 
 @app.route('/sensor-data', methods=['POST'])
 def recibir_datos():
@@ -82,55 +44,13 @@ def recibir_datos():
             acc_Z=data.get('acc_Z'),
             temperatura=data.get('temperatura'),
             frecuencia=data.get('frecuencia'),
+            estresado=data.get('estresado', None),  # Asignar None si no se pasa
             persona=data.get('persona')
         )
-
-        # Agregar el nuevo registro a la sesión
         db.session.add(new_data)
         db.session.commit()
 
-        # Consultar los últimos 5 datos de sensores de la base de datos
-        datos_anteriores = SensorData.query.with_entities(
-            SensorData.acc_X,
-            SensorData.acc_Y,
-            SensorData.acc_Z,
-            SensorData.frecuencia,
-            SensorData.temperatura
-        ).order_by(SensorData.id.desc()).limit(5).all()
-
-        # Convertir a array de numpy
-        datos_anteriores_array = np.array(datos_anteriores)
-
-        if len(datos_anteriores_array) == 0:
-            # No hay registros anteriores, no se normaliza
-            datos_normalizados = np.array([[data.get('acc_X'),
-                                            data.get('acc_Y'),
-                                            data.get('acc_Z'),
-                                            data.get('frecuencia'),
-                                            data.get('temperatura')]])
-        else:
-            # Ajustar el scaler con los datos anteriores
-            logging.info("Entrando a normalizar...")
-            scaler = StandardScaler()
-            scaler.fit(datos_anteriores_array)
-
-            # Normalización de los nuevos datos para la predicción
-            nuevos_datos = np.array([[data.get('acc_X'), 
-                                       data.get('acc_Y'),
-                                       data.get('acc_Z'),
-                                       data.get('frecuencia'),
-                                       data.get('temperatura')]])
-            datos_normalizados = scaler.transform(nuevos_datos)
-            logging.info("Normalización terminada.")
-
-        # Preparar los datos en el formato adecuado para el modelo
-        datos_normalizados_timestep = np.expand_dims(datos_normalizados, axis=1)
-
-        # Iniciar el hilo para realizar la predicción
-        threading.Thread(target=realizar_prediccion, args=(datos_normalizados_timestep, new_data)).start()
-        
-        # Devolver una respuesta inmediata
-        return jsonify({"status": "datos recibidos y almacenados, predicción en curso"}), 200
+        return jsonify({"status": "datos recibidos y almacenados"}), 200
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -190,6 +110,46 @@ def obtener_datos_ultima_persona():
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/sensor-data/update-predictions', methods=['POST'])
+def actualizar_predicciones():
+    try:
+        data = request.json
+        updates = data.get('updates', [])
+
+        for update in updates:
+            registro_id = update.get('id')
+            estresado = update.get('estresado')
+
+            registro = SensorData.query.get(registro_id)
+            if registro:
+                registro.estresado = estresado
+            else:
+                print(f"Registro no encontrado para ID: {registro_id}")
+
+        db.session.commit()
+        return jsonify({"status": "predicciones actualizadas"}), 200
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/sensor-data/delete', methods=['DELETE'])
+def eliminar_registros():
+    try:
+        data = request.json
+        ids = data.get('ids', [])
+
+        # Eliminar registros con los IDs proporcionados
+        registros_a_eliminar = SensorData.query.filter(SensorData.id.in_(ids)).all()
+        
+        for registro in registros_a_eliminar:
+            db.session.delete(registro)
+
+        db.session.commit()
+        return jsonify({"status": "registros eliminados"}), 200
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/reset-database', methods=['GET'])
 def reset_database():
     try:
@@ -206,4 +166,3 @@ def status():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
