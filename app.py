@@ -149,6 +149,45 @@ def eliminar_registros():
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/personas', methods=['GET'])
+def obtener_personas():
+    try:
+        # Obtener todos los nombres únicos de la tabla SensorData
+        personas = db.session.query(SensorData.persona.distinct()).all()
+        nombres = [persona[0] for persona in personas]  # Extraer los nombres de los resultados
+
+        return jsonify(nombres), 200
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+    
+
+@app.route('/sensor-data/persona/<nombre>', methods=['GET'])
+def obtener_datos_por_persona(nombre):
+    try:
+        # Obtener todos los datos de la persona especificada
+        datos_persona = SensorData.query.filter_by(persona=nombre).all()
+        
+        if not datos_persona:
+            return jsonify({"message": "No se encontraron datos para la persona especificada"}), 404
+        
+        result = []
+        for data in datos_persona:
+            result.append({
+                'id': data.id,
+                'acc_X': data.acc_X,
+                'acc_Y': data.acc_Y,
+                'acc_Z': data.acc_Z,
+                'temperatura': data.temperatura,
+                'frecuencia': data.frecuencia,
+                'estresado': data.estresado,
+                'persona': data.persona
+            })
+
+        return jsonify(result), 200
+    except SQLAlchemyError as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/reset-database', methods=['GET'])
 def reset_database():
