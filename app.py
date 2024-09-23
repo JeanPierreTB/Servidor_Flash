@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify 
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import SQLAlchemyError
+import threading
 import logging
 import numpy as np
 from tensorflow.keras.models import load_model
@@ -36,6 +37,16 @@ class SensorData(db.Model):
 # Crear la tabla si no existe
 with app.app_context():
     db.create_all()
+
+def realizar_prediccion(datos_normalizados_timestep, new_data):
+    logging.info("Prediciendo modelo...")
+    probabilidad = modelo.predict(datos_normalizados_timestep)
+    umbral = 0.5
+    estresado = int(probabilidad > umbral)
+    
+    # Actualizar el registro con la predicción
+    new_data.estresado = estresado
+    db.session.commit()
 
 @app.route('/sensor-data', methods=['POST'])
 def recibir_datos():
@@ -93,17 +104,11 @@ def recibir_datos():
         # Preparar los datos en el formato adecuado para el modelo
         datos_normalizados_timestep = np.expand_dims(datos_normalizados, axis=1)
 
-        # Realizar la predicción
-        logging.info("Prediciendo modelo...")
-        probabilidad = modelo.predict(datos_normalizados_timestep)
-        umbral = 0.5
-        estresado = int(probabilidad > umbral)
-
-        # Actualizar el registro con la predicción
-        new_data.estresado = estresado
-        db.session.commit()
-
-        return jsonify({"status": "datos recibidos y almacenados", "estresado": estresado}), 200
+        # Iniciar el hilo para realizar la predicción
+        threading.Thread(target=realizar_prediccion, args=(datos_normalizados_timestep, new_data)).start()
+        
+        # Devolver una respuesta inmediata
+        return jsonify({"status": "datos recibidos y almacenados, predicción en curso"}), 200
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
