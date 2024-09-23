@@ -57,11 +57,14 @@ def realizar_prediccion(datos_normalizados_timestep, new_data):
             logging.info(f"Predicción realizada en {time.time() - start_time} segundos")
             
             umbral = 0.5
-            estresado = int(probabilidad > umbral)
+            estresado = int(probabilidad[0][0] > umbral)  # Extraer el valor como un escalar
             logging.info(f"Probabilidad obtenida: {probabilidad}, estresado: {estresado}")
             
             # Actualizar el registro con la predicción
             new_data.estresado = estresado
+            
+            # Actualizar el objeto en la sesión y hacer commit
+            db.session.add(new_data)
             db.session.commit()
             logging.info("Modelo terminó de predecir y la base de datos fue actualizada")
     except Exception as e:
