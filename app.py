@@ -7,6 +7,7 @@ import logging
 import numpy as np
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import StandardScaler
+import time
 
 # Configurar el logging
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +21,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Cargar el modelo al iniciar la aplicación
-modelo = load_model('best_lstm_model_f.h5')
+try:
+    modelo = load_model('best_lstm_model_f.h5')
+    logging.info("Modelo cargado exitosamente")
+except Exception as e:
+    logging.error(f"Error al cargar el modelo: {str(e)}")
 
 # Definir el modelo de la tabla donde se almacenarán los datos
 class SensorData(db.Model):
@@ -43,14 +48,22 @@ def realizar_prediccion(datos_normalizados_timestep, new_data):
     try:
         # Crear una nueva sesión de base de datos para el hilo
         with app.app_context():
+            # Imprimir la forma de los datos antes de la predicción
+            logging.info(f"Forma de los datos para el modelo: {datos_normalizados_timestep.shape}")
+            
+            # Medir el tiempo de predicción
+            start_time = time.time()
             probabilidad = modelo.predict(datos_normalizados_timestep)
+            logging.info(f"Predicción realizada en {time.time() - start_time} segundos")
+            
             umbral = 0.5
             estresado = int(probabilidad > umbral)
+            logging.info(f"Probabilidad obtenida: {probabilidad}, estresado: {estresado}")
             
             # Actualizar el registro con la predicción
             new_data.estresado = estresado
             db.session.commit()
-            logging.info("Modelo terminó de predecir...")
+            logging.info("Modelo terminó de predecir y la base de datos fue actualizada")
     except Exception as e:
         logging.error(f"Error en la predicción: {str(e)}")
 
@@ -190,3 +203,4 @@ def status():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
