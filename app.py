@@ -40,13 +40,19 @@ with app.app_context():
 
 def realizar_prediccion(datos_normalizados_timestep, new_data):
     logging.info("Prediciendo modelo...")
-    probabilidad = modelo.predict(datos_normalizados_timestep)
-    umbral = 0.5
-    estresado = int(probabilidad > umbral)
-    
-    # Actualizar el registro con la predicción
-    new_data.estresado = estresado
-    db.session.commit()
+    try:
+        # Crear una nueva sesión de base de datos para el hilo
+        with app.app_context():
+            probabilidad = modelo.predict(datos_normalizados_timestep)
+            umbral = 0.5
+            estresado = int(probabilidad > umbral)
+            
+            # Actualizar el registro con la predicción
+            new_data.estresado = estresado
+            db.session.commit()
+            logging.info("Modelo terminó de predecir...")
+    except Exception as e:
+        logging.error(f"Error en la predicción: {str(e)}")
 
 @app.route('/sensor-data', methods=['POST'])
 def recibir_datos():
