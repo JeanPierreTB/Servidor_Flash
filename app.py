@@ -59,7 +59,7 @@ def recibir_datos():
 def obtener_datos():
     try:
         # Obtener los datos almacenados en la base de datos
-        data_list = SensorData.query.all()
+        data_list = SensorData.query.order_by(SensorData.id).all()
         result = []
         for data in data_list:
             result.append({
@@ -88,7 +88,7 @@ def obtener_datos_ultima_persona():
             nombre_ultima_persona = last_entry.persona
             
             # Obtener todos los datos de la última persona
-            datos_ultima_persona = SensorData.query.filter_by(persona=nombre_ultima_persona).all()
+            datos_ultima_persona = SensorData.query.filter_by(persona=nombre_ultima_persona).order_by(SensorData.id).all()
             
             # Formatear el resultado
             result = []
@@ -165,8 +165,8 @@ def obtener_personas():
 @app.route('/sensor-data/persona/<nombre>', methods=['GET'])
 def obtener_datos_por_persona(nombre):
     try:
-        # Obtener todos los datos de la persona especificada
-        datos_persona = SensorData.query.filter_by(persona=nombre).all()
+        # Obtener todos los datos de la persona especificada y ordenarlos por id
+        datos_persona = SensorData.query.filter_by(persona=nombre).order_by(SensorData.id).all()
         
         if not datos_persona:
             return jsonify({"message": "No se encontraron datos para la persona especificada"}), 404
@@ -187,6 +187,25 @@ def obtener_datos_por_persona(nombre):
         return jsonify(result), 200
     except SQLAlchemyError as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/sensor-data/delete-range/<int:id_inicio>/<int:id_fin>', methods=['DELETE'])
+def eliminar_registros_por_rango(id_inicio, id_fin):
+    try:
+        # Eliminar registros cuyo ID esté dentro del rango especificado
+        registros_a_eliminar = SensorData.query.filter(SensorData.id.between(id_inicio, id_fin)).all()
+        
+        if not registros_a_eliminar:
+            return jsonify({"message": "No se encontraron registros en el rango especificado"}), 404
+
+        for registro in registros_a_eliminar:
+            db.session.delete(registro)
+
+        db.session.commit()
+        return jsonify({"status": f"Registros del ID {id_inicio} al ID {id_fin} eliminados"}), 200
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 
 
 @app.route('/reset-database', methods=['GET'])
